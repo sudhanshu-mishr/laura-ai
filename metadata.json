@@ -1,0 +1,6 @@
+{
+  "name": "StudyHQ",
+  "description": "All-in-one study command center featuring an AI tutor, syllabus roadmap organizer, smart notes analysis, YouTube recommendations, and persistent focus tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
