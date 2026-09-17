@@ -11,7 +11,7 @@ dotenv.config();
 const filename = typeof __filename !== 'undefined' ? __filename : fileURLToPath(import.meta.url);
 const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(filename);
 
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || "3000", 10);
 
 // Set up Freebuff local router via freebuff2api if needed, or point to external router
 const FREEBUFF_API_URL = process.env.FREEBUFF_API_URL || "http://127.0.0.1:11434/v1";
@@ -77,7 +77,7 @@ function extractJsonFromFreebuffText(text: string): any {
   try {
     return JSON.parse(trimmed);
   } catch {
-    const match = trimmed.match(/```(?:json)?s*([sS]*?)s*```/);
+    const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (match && match[1]) {
       try {
         return JSON.parse(match[1].trim());
@@ -135,17 +135,9 @@ Output Requirements:
 
       let contentsPayload = "";
       if (syllabus.length > 25000) {
-        contentsPayload = `${promptInstructions}
-
-[WARNING: Syllabus text is extremely long. I am providing a truncated version to fit within context limits. Focus on extracting the most vital, high-level structural concepts from this excerpt.]
-
-Here is the raw syllabus text excerpt:
-${syllabus.substring(0, 25000)}...`;
+        contentsPayload = `${promptInstructions}\n\n[WARNING: Syllabus text is extremely long. I am providing a truncated version to fit within context limits. Focus on extracting the most vital, high-level structural concepts from this excerpt.]\n\nHere is the raw syllabus text excerpt:\n${syllabus.substring(0, 25000)}...`;
       } else {
-        contentsPayload = `${promptInstructions}
-
-Here is the raw syllabus text:
-${syllabus}`;
+        contentsPayload = `${promptInstructions}\n\nHere is the raw syllabus text:\n${syllabus}`;
       }
 
       const response = await callFreebuffResilient({
@@ -337,6 +329,69 @@ Respond ONLY with valid JSON array.`;
         },
       ];
       res.json({ recommendations: fallbackRecs });
+    }
+  });
+
+  // AI Tutor Chat Endpoint (Migrated to Freebuff)
+  app.post(["/api/tutor/chat", "/api/tutor/chat/"], async (req, res) => {
+    try {
+      const { messages, courseContext, teachingMode } = req.body;
+
+      let contextInstruction = `You are a helpful, extremely knowledgeable, and encouraging academic AI tutor.
+Your goal is to help students truly understand concepts, not just give them the answers.
+Ask probing questions, use analogies, and break down complex topics. Keep responses conversational and concise.`;
+
+      if (courseContext) {
+        contextInstruction += `\n\nCURRENT COURSE CONTEXT:
+Course: ${courseContext.courseName || "General Study"}
+Active Topic: ${courseContext.currentTopic?.title || "Overview"}
+Topic Summary: ${courseContext.currentTopic?.summary || ""}
+Key Terms for this topic: ${(courseContext.currentTopic?.keyTerms || []).join(", ")}
+Completed Topics: ${(courseContext.completedTopics || []).join(", ") || "None yet"}`;
+      }
+
+      if (teachingMode) {
+        if (teachingMode === "teach_next") {
+          contextInstruction += `\n\nTEACHING MODE ACTIVATED: "Teach Next Topic". Give an engaging, punchy, intuitive intro to this topic. Break the first big concept down with a memorable visual analogy. Then ask a quick sanity-check question to see if they're with you.`;
+        } else if (teachingMode === "analogy") {
+          contextInstruction += `\n\nTEACHING MODE ACTIVATED: "Analogy Engine". Explain the concept using a funny, brilliant real-world analogy (e.g. food, sports, video games, everyday life) so it instantly clicks.`;
+        } else if (teachingMode === "quiz_me") {
+          contextInstruction += `\n\nTEACHING MODE ACTIVATED: "Quick Quiz / Drill". Ask ONE snappy, high-yield conceptual question or problem to test their intuition on this topic. Don't reveal the answer immediately — let them answer first, or prompt them to take their best guess!`;
+        } else if (teachingMode === "eli5") {
+          contextInstruction += `\n\nTEACHING MODE ACTIVATED: "ELI5 / Simplify". Strip away all the academic jargon and explain this like they're 5 or talking to a buddy at 2 AM. Pure intuition and common sense.`;
+        } else if (teachingMode === "deep_dive") {
+          contextInstruction += `\n\nTEACHING MODE ACTIVATED: "Deep Dive / Edge Cases". Level up the difficulty. Discuss what professors love testing on exams, common trick questions, edge cases, and underlying mechanics.`;
+        }
+      }
+
+      const formattedContents = (messages || []).map((msg: any) => ({
+        role: msg.role === "user" ? "user" : "assistant",
+        content: msg.content,
+      }));
+
+      if (formattedContents.length === 0) {
+        formattedContents.push({
+          role: "user",
+          content: "Hey! What should we tackle first?",
+        });
+      }
+
+      const response = await generateText({
+        model: freebuffOpenAI("deepseek-v4.1-flash"),
+        messages: [
+          { role: "system", content: contextInstruction },
+          ...formattedContents,
+        ],
+        temperature: 0.7,
+      });
+
+      const replyText = response.text || "My bad, brain lagged for a second. Ask me that again!";
+      res.json({ reply: replyText });
+    } catch (error: any) {
+      console.warn("Tutor chat fallback triggered:", error?.message || error);
+      res.json({
+        reply: "⚠️ The AI tutor is experiencing a momentary spike in traffic right now. Give it 3-5 seconds and click ask again — let's lock back in!",
+      });
     }
   });
 
