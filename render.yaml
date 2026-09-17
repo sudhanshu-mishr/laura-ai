@@ -3,7 +3,9 @@ services:
     name: studyhq-freebuff
     env: node
     buildCommand: npm install && npm run build
-    startCommand: npm run start
+    startCommand: npm start
     envVars:
       - key: FREEBUFF_API_URL
         value: "https://www.codebuff.com/api/v1/chat/completions" # Change this if you have a custom codebuff proxy
+      - key: NODE_ENV
+        value: "production"
