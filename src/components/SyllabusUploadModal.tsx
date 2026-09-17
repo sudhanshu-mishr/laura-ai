@@ -2,8 +2,9 @@ import React, { useState, useRef } from "react";
 import { useStudy } from "../context/StudyContext";
 import { Course } from "../types";
 import { SAMPLE_SYLLABI_TEXT } from "../data/sampleSyllabi";
-import { UploadCloud, BookOpen, AlertCircle, Loader2, Sparkles } from "lucide-react";
+import { UploadCloud, BookOpen, AlertCircle, Loader2, Sparkles, X } from "lucide-react";
 import confetti from "canvas-confetti";
+import { apiRequest } from "../lib/api";
 
 interface SyllabusUploadModalProps {
   isOpen: boolean;
@@ -64,9 +65,8 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
     setUploadError(null);
 
     try {
-      const response = await fetch("/api/syllabus/parse", {
+      const parsed: Course = await apiRequest<Course>("/api/syllabus/parse", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: syllabusText,
           fileBase64: fileBase64,
@@ -74,13 +74,6 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
           fileName: selectedFileName,
         }),
       });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || "Server could not parse the syllabus.");
-      }
-
-      const parsed: Course = await response.json();
 
       const newCourse: Course = {
         ...parsed,
@@ -129,28 +122,31 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
   return (
     <div
       id="modal-upload-syllabus-global"
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in"
     >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+      <div className="bg-[#FAF9F5] dark:bg-[#262624] border border-[#E5E5E0] dark:border-[#30302E] rounded-3xl max-w-2xl w-full p-6 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between pb-3 border-b border-[#E5E5E0] dark:border-[#30302E]">
           <div>
-            <h3 className="text-lg font-bold text-zinc-100">Upload Course Syllabus</h3>
-            <p className="text-xs text-zinc-400">
-              Gemini AI extracts modules, topics, deadlines, and builds your study roadmap.
+            <h3 className="text-xl font-serif text-[#1F1E1D] dark:text-[#ECECEC]">
+              Upload Course Syllabus
+            </h3>
+            <p className="text-xs text-[#73726C] dark:text-[#B4B4B4] mt-0.5">
+              Gemini AI extracts weekly modules, concepts, exam milestones, and builds your interactive roadmap.
             </p>
           </div>
           <button
             id="btn-close-global-modal"
+            type="button"
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-200 text-sm font-bold p-1"
+            className="text-[#888888] hover:text-[#1F1E1D] dark:hover:text-white p-1 rounded-lg"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Quick Samples */}
         <div>
-          <span className="text-xs font-semibold text-zinc-400 block mb-2">
+          <span className="text-xs font-semibold text-[#73726C] dark:text-[#B4B4B4] block mb-2">
             ⚡ Quick test with a sample syllabus:
           </span>
           <div className="flex flex-wrap gap-2">
@@ -159,9 +155,9 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
                 key={sample.id}
                 type="button"
                 onClick={() => handleLoadSample(sample.id)}
-                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-medium border border-zinc-700/80 transition-all flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-[#FFFFFF] dark:bg-[#20201F] hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] text-[#3D3D3A] dark:text-[#ECECEC] rounded-xl text-xs font-medium border border-[#DDDDDD] dark:border-[#404040] transition-all flex items-center gap-1.5 shadow-2xs"
               >
-                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                <BookOpen className="w-3.5 h-3.5 text-[#D97757]" />
                 <span>{sample.title}</span>
               </button>
             ))}
@@ -171,7 +167,7 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
         {/* File Drag-Drop & Input */}
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-zinc-700 hover:border-indigo-500 rounded-2xl p-6 text-center cursor-pointer transition-all bg-zinc-950/40"
+          className="border-2 border-dashed border-[#DDDDDD] dark:border-[#404040] hover:border-[#D97757] rounded-2xl p-6 text-center cursor-pointer transition-all bg-[#FFFFFF] dark:bg-[#20201F]"
         >
           <input
             ref={fileInputRef}
@@ -180,44 +176,44 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
             onChange={handleFileChange}
             className="hidden"
           />
-          <UploadCloud className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
-          <p className="text-xs font-semibold text-zinc-200">
+          <UploadCloud className="w-8 h-8 text-[#D97757] mx-auto mb-2" />
+          <p className="text-xs font-semibold text-[#1F1E1D] dark:text-[#ECECEC]">
             {selectedFileName ? selectedFileName : "Click or drag syllabus file here"}
           </p>
-          <p className="text-[11px] text-zinc-500 mt-1">
-            Supports PDF, Text (.txt, .md), or photo / screenshot of syllabus
+          <p className="text-[11px] text-[#888888] mt-1">
+            Supports PDF documents, Text (.txt, .md), or syllabus screenshots
           </p>
         </div>
 
         {/* Text Paste Area */}
         <div>
-          <label className="text-xs font-semibold text-zinc-400 block mb-1">
+          <label className="text-xs font-semibold text-[#73726C] dark:text-[#B4B4B4] block mb-1">
             Or paste syllabus text directly:
           </label>
           <textarea
             id="textarea-syllabus-paste-global"
-            rows={7}
+            rows={6}
             value={syllabusText}
             onChange={(e) => {
               setSyllabusText(e.target.value);
               setUploadError(null);
             }}
             placeholder="Paste syllabus text here..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500"
+            className="w-full bg-[#FFFFFF] dark:bg-[#20201F] border border-[#DDDDDD] dark:border-[#404040] rounded-xl p-3 text-xs text-[#1F1E1D] dark:text-[#ECECEC] font-mono focus:outline-hidden focus:border-[#D97757]"
           />
         </div>
 
         {uploadError && (
-          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-300 rounded-xl text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
               <span>{uploadError}</span>
             </div>
             <button
               type="button"
               onClick={handleParseSyllabus}
               disabled={isUploading}
-              className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 rounded-lg text-[11px] font-semibold transition-all shrink-0 self-end sm:self-auto"
+              className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-700 dark:text-rose-200 rounded-lg text-[11px] font-semibold transition-all shrink-0"
             >
               Try Again
             </button>
@@ -229,7 +225,7 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-zinc-400 hover:text-zinc-200 text-xs font-medium"
+            className="px-4 py-2 text-[#73726C] dark:text-[#B4B4B4] hover:text-[#1F1E1D] dark:hover:text-white text-xs font-medium"
           >
             Cancel
           </button>
@@ -237,7 +233,7 @@ export const SyllabusUploadModal: React.FC<SyllabusUploadModalProps> = ({
             type="button"
             disabled={isUploading}
             onClick={handleParseSyllabus}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/30 flex items-center gap-2"
+            className="px-5 py-2.5 bg-[#D97757] hover:bg-[#C6613F] disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow-sm flex items-center gap-2 transition-all cursor-pointer"
           >
             {isUploading ? (
               <>

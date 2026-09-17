@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useStudy } from "../context/StudyContext";
-import { Topic } from "../types";
 import {
   Send,
   Sparkles,
@@ -12,15 +11,14 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  BookOpen,
   FilePlus,
   RotateCcw,
   Loader2,
-  ArrowRight
 } from "lucide-react";
 import Markdown from "react-markdown";
 import confetti from "canvas-confetti";
 import { NavTab } from "./Sidebar";
+import { apiRequest } from "../lib/api";
 
 interface TutorViewProps {
   setCurrentTab: (tab: NavTab) => void;
@@ -44,12 +42,10 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory, isLoading]);
 
-  // All topics in order
   const allTopics = activeCourse?.modules.flatMap((m) => m.topics) || [];
   const currentTopicIndex = allTopics.findIndex((t) => t.id === activeTopic?.id);
   const prevTopic = currentTopicIndex > 0 ? allTopics[currentTopicIndex - 1] : null;
@@ -58,7 +54,6 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
       ? allTopics[currentTopicIndex + 1]
       : null;
 
-  // Send message to Tutor API
   const handleSendMessage = async (customPrompt?: string, mode?: string) => {
     const textToSend = (customPrompt || inputMessage).trim();
     if (!textToSend && !mode) return;
@@ -79,9 +74,8 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/tutor/chat", {
+      const data = await apiRequest<{ reply?: string }>("/api/tutor/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
             ...chatHistory.slice(-8).map((m) => ({ role: m.role, content: m.content })),
@@ -98,21 +92,16 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Tutor was temporarily busy. Try asking again!");
-      }
-
-      const data = await response.json();
       addChatMessage({
         role: "model",
-        content: data.reply || "My bad, lost train of thought. Hit me again!",
+        content: data.reply || "Got it. What would you like to explore next?",
         topicId: activeTopic?.id,
         topicTitle: activeTopic?.title,
       });
     } catch (err: any) {
       addChatMessage({
         role: "model",
-        content: `⚠️ Whoops, hit a snag: ${err.message || "Network issue"}. Let's try that question once more!`,
+        content: `Notice: ${err.message || "Network issue"}. Let's try that question once more!`,
       });
     } finally {
       setIsLoading(false);
@@ -120,12 +109,11 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
     }
   };
 
-  // Quick Action triggers
   const handleQuickAction = (mode: string, label: string) => {
     setTeachingMode(mode);
     let prompt = "";
     if (mode === "teach_next") {
-      prompt = `Walk me through "${activeTopic?.title || "this topic"}" from scratch like a good TA. Break it down with an analogy and check my understanding.`;
+      prompt = `Walk me through "${activeTopic?.title || "this topic"}" from scratch like a clear, friendly TA. Break it down with an intuitive analogy and check my understanding.`;
     } else if (mode === "analogy") {
       prompt = `Give me a memorable real-world analogy for "${activeTopic?.title || "this topic"}".`;
     } else if (mode === "quiz_me") {
@@ -133,20 +121,18 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
     } else if (mode === "eli5") {
       prompt = `ELI5 "${activeTopic?.title || "this topic"}". Zero jargon, pure intuition.`;
     } else if (mode === "deep_dive") {
-      prompt = `What are the exam traps and edge cases professors love testing on "${activeTopic?.title || "this topic"}"?`;
+      prompt = `What are the exam traps, misconceptions, and tricky edge cases on "${activeTopic?.title || "this topic"}"?`;
     }
     handleSendMessage(prompt, mode);
   };
 
-  // Auto-generate note from this topic
   const handleSaveTopicNote = async () => {
     if (!activeTopic) return;
     setIsLoading(true);
 
     try {
-      const response = await fetch("/api/notes/generate", {
+      const data = await apiRequest<{ notes: string }>("/api/notes/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseName: activeCourse?.name,
           topicTitle: activeTopic.title,
@@ -155,9 +141,6 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
           chatExcerpts: chatHistory.slice(-4).map((m) => `${m.role}: ${m.content}`).join("\n"),
         }),
       });
-
-      if (!response.ok) throw new Error("Could not generate note.");
-      const data = await response.json();
 
       saveNote({
         id: "note-" + Date.now(),
@@ -186,35 +169,35 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
   };
 
   return (
-    <div id="tutor-view-container" className="flex-1 flex flex-col h-full max-w-5xl mx-auto w-full p-4 sm:p-6">
+    <div id="tutor-view-container" className="flex-1 flex flex-col h-full max-w-5xl mx-auto w-full p-4 sm:p-8 animate-fade-in">
       {/* Top Topic Navigation & Active Status Bar */}
-      <div className="bg-zinc-900/80 border border-zinc-800/90 rounded-2xl p-3.5 mb-4 backdrop-blur-md shadow-sm">
+      <div className="bg-[#FFFFFF] dark:bg-[#262624] border border-[#E5E5E0] dark:border-[#30302E] rounded-3xl p-4 sm:p-5 mb-4 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Topic Stepper & Selector */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-violet-600/20 text-violet-400 flex items-center justify-center font-bold">
-              <Bot className="w-4 h-4" />
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-[#D97757]/10 text-[#D97757] flex items-center justify-center font-bold">
+              <Bot className="w-5 h-5" />
             </div>
 
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-violet-400">
-                  AI Teaching Session
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#D97757]">
+                  Active Tutoring Session
                 </span>
                 {allTopics.length > 0 && (
-                  <span className="text-[10px] font-mono text-zinc-500">
+                  <span className="text-[10px] font-mono text-[#888888]">
                     Topic {currentTopicIndex + 1} of {allTopics.length}
                   </span>
                 )}
               </div>
 
               {allTopics.length > 0 ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mt-0.5">
                   <select
                     id="select-tutor-topic"
                     value={activeTopic?.id || ""}
                     onChange={(e) => setActiveTopicId(e.target.value)}
-                    className="bg-zinc-950 text-zinc-200 text-xs font-semibold rounded-lg px-2 py-1 border border-zinc-800 focus:outline-none focus:border-violet-500 cursor-pointer max-w-xs truncate"
+                    className="bg-[#FAF9F5] dark:bg-[#20201F] text-[#1F1E1D] dark:text-[#ECECEC] text-xs font-semibold rounded-xl px-2.5 py-1 border border-[#DDDDDD] dark:border-[#404040] focus:outline-hidden focus:border-[#D97757] cursor-pointer max-w-xs sm:max-w-sm truncate"
                   >
                     {allTopics.map((t, idx) => (
                       <option key={t.id} value={t.id}>
@@ -224,7 +207,7 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
                   </select>
                 </div>
               ) : (
-                <span className="text-xs font-semibold text-zinc-300">General Tutoring Q&A</span>
+                <span className="text-xs font-semibold text-[#1F1E1D] dark:text-[#ECECEC]">General Study Q&A</span>
               )}
             </div>
           </div>
@@ -232,24 +215,26 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
           {/* Stepper buttons & actions */}
           <div className="flex items-center gap-2 self-end sm:self-center">
             {allTopics.length > 0 && (
-              <div className="flex items-center bg-zinc-950 rounded-xl p-1 border border-zinc-800">
+              <div className="flex items-center bg-[#FAF9F5] dark:bg-[#20201F] rounded-xl p-1 border border-[#DDDDDD] dark:border-[#404040]">
                 <button
                   id="btn-prev-topic"
+                  type="button"
                   disabled={!prevTopic}
                   onClick={() => prevTopic && setActiveTopicId(prevTopic.id)}
-                  className="p-1 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:hover:text-zinc-400 rounded-lg"
+                  className="p-1 text-[#73726C] dark:text-[#B4B4B4] hover:text-[#1F1E1D] dark:hover:text-white disabled:opacity-30 rounded-lg"
                   title={prevTopic ? `Previous: ${prevTopic.title}` : "First topic"}
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-[11px] font-mono text-zinc-400 px-2">
+                <span className="text-[11px] font-mono text-[#73726C] dark:text-[#B4B4B4] px-2">
                   {currentTopicIndex + 1}/{allTopics.length}
                 </span>
                 <button
                   id="btn-next-topic"
+                  type="button"
                   disabled={!nextTopic}
                   onClick={() => nextTopic && setActiveTopicId(nextTopic.id)}
-                  className="p-1 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:hover:text-zinc-400 rounded-lg"
+                  className="p-1 text-[#73726C] dark:text-[#B4B4B4] hover:text-[#1F1E1D] dark:hover:text-white disabled:opacity-30 rounded-lg"
                   title={nextTopic ? `Next: ${nextTopic.title}` : "Last topic"}
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -260,6 +245,7 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
             {activeTopic && (
               <button
                 id="btn-toggle-mastery"
+                type="button"
                 onClick={() => {
                   if (activeCourse) {
                     toggleTopicComplete(activeCourse.id, activeTopic.id);
@@ -272,8 +258,8 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
                   activeTopic.isCompleted
-                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                    : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700"
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                    : "bg-[#FAF9F5] dark:bg-[#20201F] text-[#3D3D3A] dark:text-[#ECECEC] hover:bg-[#F0EEE6] border-[#DDDDDD] dark:border-[#404040]"
                 }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -283,8 +269,9 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
 
             <button
               id="btn-clear-chat"
+              type="button"
               onClick={clearChatHistory}
-              className="p-2 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80 rounded-xl text-xs transition-all"
+              className="p-2 text-[#888888] hover:text-[#1F1E1D] dark:hover:text-white hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] rounded-xl text-xs transition-all"
               title="Reset Chat"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -294,13 +281,13 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
 
         {/* Active topic summary pill */}
         {activeTopic && (
-          <div className="mt-2.5 pt-2.5 border-t border-zinc-800/60 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+          <div className="mt-3 pt-3 border-t border-[#F0EEE6] dark:border-[#30302E] flex flex-wrap items-center justify-between gap-2 text-xs text-[#73726C] dark:text-[#B4B4B4]">
             <p className="line-clamp-1 italic max-w-xl">
               "{activeTopic.summary}"
             </p>
             <div className="flex items-center gap-2 font-mono text-[10px]">
-              <span className="text-zinc-500">{activeTopic.difficulty}</span>
-              <span className="text-indigo-400">~{activeTopic.estimatedMinutes}m est</span>
+              <span className="text-[#888888]">{activeTopic.difficulty}</span>
+              <span className="text-[#D97757]">~{activeTopic.estimatedMinutes}m est</span>
             </div>
           </div>
         )}
@@ -310,56 +297,62 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none text-xs">
         <button
           id="chip-teach-topic"
+          type="button"
           onClick={() => handleQuickAction("teach_next", "Start Teaching")}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold rounded-xl shadow-sm transition-all"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#D97757] hover:bg-[#C6613F] text-white font-semibold rounded-xl shadow-xs transition-all cursor-pointer"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Start Teaching This</span>
+          <span>Teach This Topic</span>
         </button>
 
         <button
           id="chip-analogy"
+          type="button"
           onClick={() => handleQuickAction("analogy", "Analogy")}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl transition-all font-medium"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] dark:bg-[#262624] hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] border border-[#DDDDDD] dark:border-[#404040] text-[#3D3D3A] dark:text-[#ECECEC] rounded-xl transition-all font-medium shadow-2xs"
         >
-          <Brain className="w-3.5 h-3.5 text-amber-400" />
-          <span>Explain with Analogy</span>
+          <Brain className="w-3.5 h-3.5 text-[#D97757]" />
+          <span>Intuitive Analogy</span>
         </button>
 
         <button
           id="chip-quiz-me"
+          type="button"
           onClick={() => handleQuickAction("quiz_me", "Quiz Me")}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl transition-all font-medium"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] dark:bg-[#262624] hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] border border-[#DDDDDD] dark:border-[#404040] text-[#3D3D3A] dark:text-[#ECECEC] rounded-xl transition-all font-medium shadow-2xs"
         >
-          <Zap className="w-3.5 h-3.5 text-emerald-400" />
+          <Zap className="w-3.5 h-3.5 text-[#D97757]" />
           <span>Quick Quiz Drill</span>
         </button>
 
         <button
           id="chip-eli5"
+          type="button"
           onClick={() => handleQuickAction("eli5", "ELI5")}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl transition-all font-medium"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] dark:bg-[#262624] hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] border border-[#DDDDDD] dark:border-[#404040] text-[#3D3D3A] dark:text-[#ECECEC] rounded-xl transition-all font-medium shadow-2xs"
         >
-          <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+          <HelpCircle className="w-3.5 h-3.5 text-[#D97757]" />
           <span>ELI5 / Simplify</span>
         </button>
 
         <button
           id="chip-deep-dive"
+          type="button"
           onClick={() => handleQuickAction("deep_dive", "Exam Traps")}
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl transition-all font-medium"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#FFFFFF] dark:bg-[#262624] hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] border border-[#DDDDDD] dark:border-[#404040] text-[#3D3D3A] dark:text-[#ECECEC] rounded-xl transition-all font-medium shadow-2xs"
         >
-          <span>🎯 Exam Traps</span>
+          <span>🎯 Common Exam Traps</span>
         </button>
 
         {activeTopic && (
           <button
             id="chip-save-notes"
+            type="button"
             onClick={handleSaveTopicNote}
-            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-indigo-500/30 text-indigo-300 rounded-xl transition-all font-medium"
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#D97757]/10 hover:bg-[#D97757]/20 border border-[#D97757]/30 text-[#D97757] rounded-xl transition-all font-medium shadow-2xs"
           >
             <FilePlus className="w-3.5 h-3.5" />
-            <span>Save Clean Notes</span>
+            <span>Generate Notes</span>
           </button>
         )}
       </div>
@@ -367,7 +360,7 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
       {/* Chat Messages Feed */}
       <div
         id="chat-messages-scroll-area"
-        className="flex-1 overflow-y-auto pr-2 space-y-4 my-2"
+        className="flex-1 overflow-y-auto pr-2 space-y-4 my-3"
       >
         {chatHistory.map((msg) => {
           const isUser = msg.role === "user";
@@ -377,31 +370,31 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
               className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
             >
               {!isUser && (
-                <div className="w-8 h-8 rounded-xl bg-violet-600/20 border border-violet-500/30 text-violet-300 flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-xl bg-[#D97757]/10 border border-[#D97757]/20 text-[#D97757] flex items-center justify-center shrink-0 mt-0.5">
                   <Bot className="w-4 h-4" />
                 </div>
               )}
 
               <div
-                className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed ${
+                className={`max-w-[88%] sm:max-w-[80%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed ${
                   isUser
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20 rounded-tr-sm"
-                    : "bg-zinc-900/90 border border-zinc-800/90 text-zinc-200 rounded-tl-sm shadow-sm"
+                    ? "bg-[#D97757] text-white shadow-xs rounded-tr-xs"
+                    : "bg-[#FFFFFF] dark:bg-[#262624] border border-[#E5E5E0] dark:border-[#30302E] text-[#1F1E1D] dark:text-[#ECECEC] rounded-tl-xs shadow-2xs"
                 }`}
               >
                 {msg.topicTitle && (
-                  <div className="text-[10px] font-mono text-zinc-400 mb-1 opacity-80">
+                  <div className="text-[10px] font-mono text-[#888888] mb-1 opacity-85">
                     Topic: {msg.topicTitle}
                   </div>
                 )}
 
-                <div className="prose prose-invert prose-xs sm:prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-li:my-0.5 prose-strong:text-indigo-300">
+                <div className="prose prose-neutral dark:prose-invert prose-xs sm:prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-li:my-0.5 prose-strong:text-[#D97757]">
                   <Markdown>{msg.content}</Markdown>
                 </div>
 
                 <div
                   className={`text-[10px] mt-2 font-mono ${
-                    isUser ? "text-indigo-200/80" : "text-zinc-500"
+                    isUser ? "text-white/70" : "text-[#888888]"
                   }`}
                 >
                   {new Date(msg.timestamp).toLocaleTimeString([], {
@@ -412,7 +405,7 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
               </div>
 
               {isUser && (
-                <div className="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-500/40 text-indigo-200 flex items-center justify-center shrink-0 mt-0.5 font-bold text-xs">
+                <div className="w-8 h-8 rounded-xl bg-[#F0EEE6] dark:bg-[#30302E] text-[#3D3D3A] dark:text-[#ECECEC] flex items-center justify-center shrink-0 mt-0.5 font-bold text-xs">
                   <User className="w-4 h-4" />
                 </div>
               )}
@@ -422,12 +415,12 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
 
         {isLoading && (
           <div className="flex gap-3 justify-start">
-            <div className="w-8 h-8 rounded-xl bg-violet-600/20 border border-violet-500/30 text-violet-300 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-[#D97757]/10 border border-[#D97757]/20 text-[#D97757] flex items-center justify-center shrink-0">
               <Bot className="w-4 h-4" />
             </div>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-sm p-4 flex items-center gap-2 text-xs text-zinc-400">
-              <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-              <span>Thinking like your TA...</span>
+            <div className="bg-[#FFFFFF] dark:bg-[#262624] border border-[#E5E5E0] dark:border-[#30302E] rounded-2xl rounded-tl-xs p-4 flex items-center gap-2 text-xs text-[#73726C] dark:text-[#B4B4B4]">
+              <Loader2 className="w-4 h-4 animate-spin text-[#D97757]" />
+              <span>Analyzing problem with Gemini...</span>
             </div>
           </div>
         )}
@@ -443,7 +436,7 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
         }}
         className="mt-2 relative"
       >
-        <div className="flex items-center gap-2 bg-zinc-900/90 border border-zinc-800 rounded-2xl p-2 focus-within:border-indigo-500/80 shadow-lg backdrop-blur-md">
+        <div className="flex items-center gap-2 bg-[#FFFFFF] dark:bg-[#262624] border border-[#DDDDDD] dark:border-[#30302E] rounded-2xl p-2 focus-within:border-[#D97757] shadow-xs">
           <input
             id="input-tutor-message"
             type="text"
@@ -451,17 +444,17 @@ export const TutorView: React.FC<TutorViewProps> = ({ setCurrentTab }) => {
             onChange={(e) => setInputMessage(e.target.value)}
             placeholder={
               activeTopic
-                ? `Ask anything about "${activeTopic.title}" or take a guess...`
-                : "Ask your AI TA anything or paste a problem..."
+                ? `Ask anything about "${activeTopic.title}"...`
+                : "Ask anything about your courses or paste a concept..."
             }
-            className="flex-1 bg-transparent text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 px-3 focus:outline-none"
+            className="flex-1 bg-transparent text-xs sm:text-sm text-[#1F1E1D] dark:text-[#ECECEC] placeholder-[#888888] px-3 focus:outline-hidden font-sans"
           />
 
           <button
             id="btn-send-tutor-message"
             type="submit"
             disabled={isLoading || !inputMessage.trim()}
-            className="p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-md shadow-indigo-600/25 shrink-0"
+            className="p-2.5 bg-[#D97757] hover:bg-[#C6613F] disabled:opacity-40 text-white rounded-xl transition-all shadow-xs shrink-0 cursor-pointer"
           >
             <Send className="w-4 h-4" />
           </button>

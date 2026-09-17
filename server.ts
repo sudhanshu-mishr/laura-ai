@@ -46,7 +46,7 @@ async function callGeminiResilient(options: GeminiResilientOptions) {
   const primary = options.primaryModel || "gemini-3.8-flash";
   const fallbacks = options.fallbackModels || ["gemini-flash-latest", "gemini-3.1-flash-lite"];
   const modelsToTry = [primary, ...fallbacks];
-  const maxRetries = options.maxRetriesPerModel ?? 2;
+  const maxRetries = options.maxRetriesPerModel ?? 1;
 
   let lastError: any = null;
 
@@ -54,7 +54,7 @@ async function callGeminiResilient(options: GeminiResilientOptions) {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         if (attempt > 0) {
-          const delayMs = Math.min(800 * Math.pow(2, attempt - 1) + Math.random() * 400, 3500);
+          const delayMs = Math.min(500 * Math.pow(2, attempt - 1) + Math.random() * 300, 2000);
           console.log(`[Gemini Resilient] Retrying ${model} (attempt ${attempt + 1}/${maxRetries + 1}) after ${Math.round(delayMs)}ms...`);
           await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
@@ -68,25 +68,34 @@ async function callGeminiResilient(options: GeminiResilientOptions) {
         return response;
       } catch (err: any) {
         lastError = err;
-        const errString = `${err?.status || ""} ${err?.code || ""} ${err?.message || ""} ${JSON.stringify(err)}`;
-        const isTransient =
-          errString.includes("503") ||
-          errString.includes("UNAVAILABLE") ||
-          errString.includes("high demand") ||
-          errString.includes("temporary") ||
-          errString.includes("429") ||
-          errString.includes("RESOURCE_EXHAUSTED") ||
-          errString.includes("overloaded");
+        const errMsg = err?.message || String(err || "");
+        const is503HighDemand =
+          err?.status === 503 ||
+          err?.code === 503 ||
+          errMsg.includes("503") ||
+          errMsg.includes("UNAVAILABLE") ||
+          errMsg.includes("high demand") ||
+          errMsg.includes("overloaded");
 
-        console.warn(`[Gemini Resilient] Model ${model} attempt ${attempt + 1} failed:`, err?.message || err);
+        console.warn(`[Gemini Resilient] Model ${model} returned temporary status: ${err?.status || err?.code || "spike"}.`);
+
+        // If high demand 503, pause briefly (400ms) before trying the next fallback model to allow backend buffer to clear
+        if (is503HighDemand) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          break;
+        }
+
+        const isTransient =
+          err?.status === 429 ||
+          errMsg.includes("429") ||
+          errMsg.includes("RESOURCE_EXHAUSTED") ||
+          errMsg.includes("temporary");
 
         if (!isTransient) {
-          // If error is not transient (e.g., bad parameter), move on or break
           break;
         }
       }
     }
-    console.log(`[Gemini Resilient] Primary model ${model} temporarily unavailable. Trying fallback model...`);
   }
 
   throw lastError || new Error("Gemini AI models are currently experiencing high demand. Please try again in a few seconds.");
@@ -286,10 +295,11 @@ async function startServer() {
   });
 
   // Parse Syllabus Endpoint
-  app.post("/api/syllabus/parse", async (req, res) => {
-    const { text, fileBase64, mimeType, fileName } = req.body;
+  app.post(["/api/syllabus/parse", "/api/syllabus/parse/"], async (req, res) => {
+    const text = req.body.text || req.body.syllabusText || "";
+    const { fileBase64, mimeType, fileName } = req.body;
 
-    if (!text && !fileBase64) {
+    if ((!text || text.trim().length === 0) && !fileBase64) {
       return res.status(400).json({ error: "Please provide either syllabus text or an uploaded file." });
     }
 
@@ -381,7 +391,7 @@ Format requirement: Respond ONLY with valid JSON matching this schema. Do not in
   });
 
   // AI Tutor Chat Endpoint
-  app.post("/api/tutor/chat", async (req, res) => {
+  app.post(["/api/tutor/chat", "/api/tutor/chat/"], async (req, res) => {
     try {
       const { messages, courseContext, teachingMode } = req.body;
 
@@ -435,7 +445,7 @@ Completed Topics: ${(courseContext.completedTopics || []).join(", ") || "None ye
       const replyText = response?.text || "My bad, brain lagged for a second. Ask me that again!";
       res.json({ reply: replyText });
     } catch (error: any) {
-      console.error("Tutor chat error:", error);
+      console.warn("Tutor chat fallback triggered:", error?.message || error);
       res.json({
         reply: "⚠️ The AI tutor is experiencing a momentary spike in traffic right now. Give it 3-5 seconds and click ask again — let's lock back in!",
       });
@@ -443,8 +453,9 @@ Completed Topics: ${(courseContext.completedTopics || []).join(", ") || "None ye
   });
 
   // Auto-Generate Structured Notes Endpoint
-  app.post("/api/notes/generate", async (req, res) => {
-    const { courseName, topicTitle, topicSummary, keyTerms, chatExcerpts } = req.body;
+  app.post(["/api/notes/generate", "/api/notes/generate/"], async (req, res) => {
+    const topicTitle = req.body.topicTitle || req.body.title || req.body.topic || "Study Notes";
+    const { courseName, topicSummary, keyTerms, chatExcerpts } = req.body;
 
     try {
       const prompt = `You are StudyHQ's elite note-taking engine.
@@ -483,7 +494,7 @@ Keep the formatting clean, modern, and easy to scan. No fluff.`;
 
       res.json({ notes: response?.text || "" });
     } catch (error: any) {
-      console.error("Notes generation error:", error);
+      console.warn("Notes generation fallback triggered:", error?.message || error);
       // Generate clean structured study notes fallback if demand spike persists
       const fallbackNotes = `# ${topicTitle || "Study Notes"}
 
@@ -510,10 +521,11 @@ ${(keyTerms || ["Core Theory", "Application"]).map((term: string) => `- **${term
   });
 
   // Analyze User Notes Endpoint (summarize, quiz, find gaps, format cleanup)
-  app.post("/api/notes/analyze", async (req, res) => {
-    const { userNotes, courseName, topicTitle, action } = req.body;
+  app.post(["/api/notes/analyze", "/api/notes/analyze/"], async (req, res) => {
+    const userNotes = req.body.userNotes || req.body.content || req.body.notes || req.body.text || "";
+    const { courseName, topicTitle, action } = req.body;
 
-    if (!userNotes || userNotes.trim().length === 0) {
+    if (!userNotes || typeof userNotes !== "string" || userNotes.trim().length === 0) {
       return res.status(400).json({ error: "Please provide notes to analyze." });
     }
 
@@ -562,7 +574,7 @@ Respond ONLY with valid JSON.`;
 
       res.json(parsed);
     } catch (error: any) {
-      console.error("Notes analysis error:", error);
+      console.warn("Notes analysis fallback triggered:", error?.message || error);
       // Fallback structured analysis
       const fallbackAnalysis = {
         cleanedNotes: `# ${topicTitle || "Polished Notes"}\n\n${userNotes}`,
@@ -586,8 +598,9 @@ Respond ONLY with valid JSON.`;
   });
 
   // YouTube Recommendation Generator Endpoint
-  app.post("/api/youtube/recommend", async (req, res) => {
-    const { courseName, topicTitle, topicSummary, keyTerms } = req.body;
+  app.post(["/api/youtube/recommend", "/api/youtube/recommend/"], async (req, res) => {
+    const topicTitle = req.body.topicTitle || req.body.title || req.body.topic || "Academic Study";
+    const { courseName, topicSummary, keyTerms } = req.body;
 
     try {
       const prompt = `You are StudyHQ's YouTube learning curator.
@@ -635,7 +648,7 @@ Respond ONLY with valid JSON array.`;
 
       res.json({ recommendations: enhanced });
     } catch (error: any) {
-      console.error("YouTube recommend error:", error);
+      console.warn("YouTube recommend fallback triggered:", error?.message || error);
       // High-yield fallback search recommendations tailored to the topic
       const topic = topicTitle || "Core Concepts";
       const fallbackRecs = [
@@ -678,6 +691,27 @@ Respond ONLY with valid JSON array.`;
       ];
       res.json({ recommendations: fallbackRecs });
     }
+  });
+
+  // Catch-all for any unmatched /api/* route so it NEVER falls through to Vite HTML
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({
+      error: `API route not found: ${req.method} ${req.originalUrl}`,
+    });
+  });
+
+  // Global error handler for API routes
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Server API error:", err);
+    if (res.headersSent) {
+      return next(err);
+    }
+    if (req.originalUrl && req.originalUrl.startsWith("/api")) {
+      return res.status(500).json({
+        error: err?.message || "An unexpected server error occurred.",
+      });
+    }
+    next(err);
   });
 
   // Vite middleware setup for SPA

@@ -4,21 +4,17 @@ import { Note } from "../types";
 import {
   Search,
   Plus,
-  FileText,
   Sparkles,
   BookOpen,
   Trash2,
   Download,
   Check,
   Zap,
-  HelpCircle,
-  AlertCircle,
   Loader2,
-  Tag,
-  ArrowRight
 } from "lucide-react";
 import Markdown from "react-markdown";
 import confetti from "canvas-confetti";
+import { apiRequest } from "../lib/api";
 
 export const NotesView: React.FC = () => {
   const { notes, activeCourse, activeTopic, saveNote, deleteNote, courses } = useStudy();
@@ -93,9 +89,8 @@ export const NotesView: React.FC = () => {
 
     setIsAnalyzing(true);
     try {
-      const response = await fetch("/api/notes/generate", {
+      const data = await apiRequest<{ notes: string }>("/api/notes/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseName: activeCourse?.name,
           topicTitle: activeTopic.title,
@@ -103,9 +98,6 @@ export const NotesView: React.FC = () => {
           keyTerms: activeTopic.keyTerms,
         }),
       });
-
-      if (!response.ok) throw new Error("Could not generate note.");
-      const data = await response.json();
 
       const newNote: Note = {
         id: "note-" + Date.now(),
@@ -137,15 +129,14 @@ export const NotesView: React.FC = () => {
     }
   };
 
-  // Analyze active note (find gaps, quiz, format)
+  // Analyze active note
   const handleAnalyzeNotes = async (action: "all" | "quiz" | "find_gaps" | "cleanup_format") => {
     if (!activeNote) return;
 
     setIsAnalyzing(true);
     try {
-      const response = await fetch("/api/notes/analyze", {
+      const data = await apiRequest<any>("/api/notes/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userNotes: isEditing ? editContent : activeNote.content,
           courseName: activeNote.courseName,
@@ -154,8 +145,6 @@ export const NotesView: React.FC = () => {
         }),
       });
 
-      if (!response.ok) throw new Error("Could not analyze notes.");
-      const data = await response.json();
       setAnalysisResult(data);
       showNotification("AI note analysis complete!", "success");
 
@@ -173,7 +162,6 @@ export const NotesView: React.FC = () => {
     }
   };
 
-  // Save current edit
   const handleSaveEdit = () => {
     if (!activeNote) return;
     const updated: Note = {
@@ -190,7 +178,6 @@ export const NotesView: React.FC = () => {
     setIsEditing(false);
   };
 
-  // Start editing
   const handleStartEdit = (note: Note) => {
     setActiveNoteId(note.id);
     setEditTitle(note.title);
@@ -200,7 +187,6 @@ export const NotesView: React.FC = () => {
     setAnalysisResult(null);
   };
 
-  // Export note to Markdown file
   const handleExportMarkdown = (note: Note) => {
     const blob = new Blob([note.content], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -212,14 +198,13 @@ export const NotesView: React.FC = () => {
   };
 
   return (
-    <div id="notes-view-container" className="flex-1 flex flex-col lg:flex-row h-full w-full max-w-7xl mx-auto p-4 sm:p-6 gap-6">
-      {/* Left Column: Note List & Search Sidebar (320px) */}
+    <div id="notes-view-container" className="flex-1 flex flex-col lg:flex-row h-full w-full max-w-7xl mx-auto p-4 sm:p-8 gap-6 animate-fade-in">
+      {/* Left Column: Note List & Search Sidebar */}
       <div className="w-full lg:w-80 shrink-0 flex flex-col gap-3">
-        {/* Top Controls */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-zinc-100">Smart Notes</h1>
-            <span className="text-[11px] text-zinc-400 font-mono">
+            <h1 className="text-xl font-serif text-[#1F1E1D] dark:text-[#ECECEC]">Smart Notes</h1>
+            <span className="text-[11px] text-[#73726C] dark:text-[#B4B4B4] font-mono">
               {notes.length} saved document{notes.length === 1 ? "" : "s"}
             </span>
           </div>
@@ -227,8 +212,9 @@ export const NotesView: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <button
               id="btn-create-note"
+              type="button"
               onClick={handleCreateNewNote}
-              className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/30 flex items-center gap-1 transition-all"
+              className="p-2 bg-[#D97757] hover:bg-[#C6613F] text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1 transition-all cursor-pointer"
               title="New blank note"
             >
               <Plus className="w-4 h-4" />
@@ -237,12 +223,13 @@ export const NotesView: React.FC = () => {
             {activeTopic && (
               <button
                 id="btn-ai-generate-note"
+                type="button"
                 onClick={handleAutoGenerateForTopic}
                 disabled={isAnalyzing}
-                className="p-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-40"
+                className="p-2 bg-[#D97757]/10 hover:bg-[#D97757]/20 text-[#D97757] border border-[#D97757]/30 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-40"
                 title={`Auto-generate notes for ${activeTopic.title}`}
               >
-                <Sparkles className="w-4 h-4 text-violet-400" />
+                <Sparkles className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -250,14 +237,14 @@ export const NotesView: React.FC = () => {
 
         {/* Search Bar */}
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" />
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#888888]" />
           <input
             id="input-search-notes"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search notes, terms, topics..."
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-[#FFFFFF] dark:bg-[#262624] border border-[#DDDDDD] dark:border-[#30302E] rounded-xl pl-9 pr-3 py-2 text-xs text-[#1F1E1D] dark:text-[#ECECEC] placeholder-[#888888] focus:outline-hidden focus:border-[#D97757]"
           />
         </div>
 
@@ -267,7 +254,7 @@ export const NotesView: React.FC = () => {
             id="select-notes-course-filter"
             value={selectedCourseFilter}
             onChange={(e) => setSelectedCourseFilter(e.target.value)}
-            className="bg-zinc-900 text-zinc-300 text-xs rounded-xl px-3 py-2 border border-zinc-800 focus:outline-none focus:border-indigo-500"
+            className="bg-[#FFFFFF] dark:bg-[#262624] text-[#3D3D3A] dark:text-[#ECECEC] text-xs rounded-xl px-3 py-2 border border-[#DDDDDD] dark:border-[#30302E] focus:outline-hidden focus:border-[#D97757]"
           >
             <option value="all">All Courses</option>
             {courses.map((c) => (
@@ -281,7 +268,7 @@ export const NotesView: React.FC = () => {
         {/* Notes List */}
         <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[70vh]">
           {filteredNotes.length === 0 ? (
-            <div className="p-8 text-center text-zinc-500 text-xs rounded-2xl bg-zinc-900/30 border border-zinc-800/40">
+            <div className="p-8 text-center text-[#888888] text-xs rounded-2xl bg-[#FFFFFF] dark:bg-[#262624] border border-[#E5E5E0] dark:border-[#30302E]">
               No notes found. Create one or auto-generate from a topic!
             </div>
           ) : (
@@ -298,26 +285,26 @@ export const NotesView: React.FC = () => {
                   }}
                   className={`p-3.5 rounded-2xl border cursor-pointer transition-all text-left group ${
                     isSelected
-                      ? "bg-zinc-800/90 border-indigo-500/60 shadow-md shadow-indigo-500/5"
-                      : "bg-zinc-900/50 border-zinc-800/80 hover:bg-zinc-900 hover:border-zinc-700"
+                      ? "bg-[#FFFFFF] dark:bg-[#262624] border-[#D97757] shadow-xs"
+                      : "bg-[#FFFFFF]/70 dark:bg-[#262624]/70 border-[#E5E5E0] dark:border-[#30302E] hover:bg-[#FFFFFF] dark:hover:bg-[#262624]"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-xs font-bold text-zinc-100 line-clamp-1 group-hover:text-white">
+                    <h3 className="text-xs font-bold text-[#1F1E1D] dark:text-[#ECECEC] line-clamp-1 group-hover:text-[#D97757]">
                       {note.title}
                     </h3>
                     {note.aiGenerated && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-violet-500/10 text-violet-400 font-mono shrink-0">
-                        AI TA
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#D97757]/10 text-[#D97757] font-mono shrink-0">
+                        AI
                       </span>
                     )}
                   </div>
 
-                  <p className="text-[11px] text-zinc-400 line-clamp-2 mt-1 leading-relaxed">
+                  <p className="text-[11px] text-[#73726C] dark:text-[#B4B4B4] line-clamp-2 mt-1 leading-relaxed">
                     {note.content.replace(/[#*`_>]/g, "").slice(0, 95)}...
                   </p>
 
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800/60 text-[10px] text-zinc-500">
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#F0EEE6] dark:border-[#30302E] text-[10px] text-[#888888]">
                     <span className="truncate max-w-[140px]">{note.topicTitle}</span>
                     <span className="font-mono">
                       {new Date(note.updatedAt).toLocaleDateString([], {
@@ -334,11 +321,11 @@ export const NotesView: React.FC = () => {
       </div>
 
       {/* Right Column: Note Viewer / Editor & AI Analysis Panel */}
-      <div className="flex-1 flex flex-col bg-zinc-900/60 border border-zinc-800/80 rounded-3xl p-5 shadow-sm overflow-hidden min-h-[600px]">
+      <div className="flex-1 flex flex-col bg-[#FFFFFF] dark:bg-[#262624] border border-[#E5E5E0] dark:border-[#30302E] rounded-3xl p-6 shadow-xs overflow-hidden min-h-[600px]">
         {activeNote ? (
           <div className="flex-1 flex flex-col h-full">
             {/* Note Header & Action Buttons */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#F0EEE6] dark:border-[#30302E]">
               <div>
                 {isEditing ? (
                   <input
@@ -346,22 +333,22 @@ export const NotesView: React.FC = () => {
                     type="text"
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="text-lg font-bold bg-zinc-950 text-zinc-100 px-3 py-1.5 rounded-xl border border-zinc-700 focus:outline-none focus:border-indigo-500 w-full sm:w-80"
+                    className="text-lg font-serif bg-[#FAF9F5] dark:bg-[#20201F] text-[#1F1E1D] dark:text-[#ECECEC] px-3 py-1.5 rounded-xl border border-[#DDDDDD] dark:border-[#404040] focus:outline-hidden focus:border-[#D97757] w-full sm:w-80"
                   />
                 ) : (
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-bold text-zinc-100">{activeNote.title}</h2>
+                    <h2 className="text-xl font-serif text-[#1F1E1D] dark:text-[#ECECEC]">{activeNote.title}</h2>
                     {activeNote.aiGenerated && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 font-mono">
-                        TA Generated
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#D97757]/10 text-[#D97757] border border-[#D97757]/20 font-mono">
+                        TA Note
                       </span>
                     )}
                   </div>
                 )}
-                <div className="flex items-center gap-2 mt-1 text-xs text-zinc-400">
+                <div className="flex items-center gap-2 mt-1 text-xs text-[#73726C] dark:text-[#B4B4B4]">
                   <span>{activeNote.courseName}</span>
                   <span>•</span>
-                  <span className="font-medium text-zinc-300">{activeNote.topicTitle}</span>
+                  <span className="font-medium text-[#1F1E1D] dark:text-[#ECECEC]">{activeNote.topicTitle}</span>
                 </div>
               </div>
 
@@ -370,42 +357,46 @@ export const NotesView: React.FC = () => {
                 {isEditing ? (
                   <button
                     id="btn-save-note-edit"
+                    type="button"
                     onClick={handleSaveEdit}
-                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-all"
                   >
                     <Check className="w-3.5 h-3.5" /> Save
                   </button>
                 ) : (
                   <button
                     id="btn-start-note-edit"
+                    type="button"
                     onClick={() => handleStartEdit(activeNote)}
-                    className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold transition-all"
+                    className="px-3 py-1.5 bg-[#FAF9F5] dark:bg-[#20201F] hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] border border-[#DDDDDD] dark:border-[#404040] text-[#3D3D3A] dark:text-[#ECECEC] rounded-xl text-xs font-semibold transition-all"
                   >
                     Edit Notes
                   </button>
                 )}
 
-                {/* AI Analysis trigger dropdown/buttons */}
+                {/* AI Analysis trigger button */}
                 <button
                   id="btn-analyze-gaps"
+                  type="button"
                   disabled={isAnalyzing}
                   onClick={() => handleAnalyzeNotes("all")}
-                  className="px-3 py-1.5 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                  className="px-3 py-1.5 bg-[#D97757]/10 hover:bg-[#D97757]/20 text-[#D97757] border border-[#D97757]/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
                   title="AI analyzes your notes for missed exam topics and generates practice quiz"
                 >
                   {isAnalyzing ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                    <Sparkles className="w-3.5 h-3.5" />
                   )}
-                  <span>AI Gap Finder & Quiz</span>
+                  <span>Gap Finder & Quiz</span>
                 </button>
 
                 <button
                   id="btn-cleanup-notes"
+                  type="button"
                   disabled={isAnalyzing}
                   onClick={() => handleAnalyzeNotes("cleanup_format")}
-                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-medium transition-all"
+                  className="px-3 py-1.5 bg-[#FAF9F5] dark:bg-[#20201F] hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] border border-[#DDDDDD] dark:border-[#404040] text-[#3D3D3A] dark:text-[#ECECEC] rounded-xl text-xs font-medium transition-all"
                   title="Clean up formatting and structure"
                 >
                   Clean Format
@@ -413,8 +404,9 @@ export const NotesView: React.FC = () => {
 
                 <button
                   id="btn-download-note"
+                  type="button"
                   onClick={() => handleExportMarkdown(activeNote)}
-                  className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-xl text-xs transition-all"
+                  className="p-2 text-[#888888] hover:text-[#1F1E1D] dark:hover:text-white hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] rounded-xl text-xs transition-all"
                   title="Export Markdown (.md)"
                 >
                   <Download className="w-4 h-4" />
@@ -422,10 +414,11 @@ export const NotesView: React.FC = () => {
 
                 <button
                   id="btn-delete-note"
+                  type="button"
                   onClick={() => {
                     if (confirm("Delete this note?")) deleteNote(activeNote.id);
                   }}
-                  className="p-2 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl text-xs transition-all"
+                  className="p-2 text-[#888888] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-[#F0EEE6] dark:hover:bg-[#30302E] rounded-xl text-xs transition-all"
                   title="Delete Note"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -433,15 +426,15 @@ export const NotesView: React.FC = () => {
               </div>
             </div>
 
-            {/* In-app notification toast/banner */}
+            {/* Notification banner */}
             {notification && (
               <div
                 className={`my-3 p-3 rounded-xl text-xs flex items-center justify-between gap-2 border ${
                   notification.type === "error"
-                    ? "bg-rose-500/10 border-rose-500/20 text-rose-300"
+                    ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-300"
                     : notification.type === "success"
-                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
-                    : "bg-indigo-500/10 border-indigo-500/20 text-indigo-300"
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                    : "bg-[#D97757]/10 border-[#D97757]/20 text-[#D97757]"
                 }`}
               >
                 <span>{notification.message}</span>
@@ -459,34 +452,33 @@ export const NotesView: React.FC = () => {
             {analysisResult && (
               <div
                 id="ai-analysis-feedback-card"
-                className="my-3 p-4 rounded-2xl bg-gradient-to-r from-violet-950/30 via-zinc-900 to-zinc-900 border border-violet-500/30 text-xs shadow-md"
+                className="my-3 p-4 rounded-2xl bg-[#FAF9F5] dark:bg-[#20201F] border border-[#D97757]/30 text-xs shadow-xs"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-violet-300 flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
-                    <Zap className="w-4 h-4 text-amber-400" /> TA Note Intelligence
+                  <span className="font-bold text-[#D97757] flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
+                    <Zap className="w-4 h-4" /> Note Intelligence Report
                   </span>
                   <button
+                    type="button"
                     onClick={() => setAnalysisResult(null)}
-                    className="text-zinc-400 hover:text-zinc-200"
+                    className="text-[#888888] hover:text-[#1F1E1D] dark:hover:text-white"
                   >
                     ✕
                   </button>
                 </div>
 
-                {/* Summary */}
                 {analysisResult.summary && (
-                  <p className="text-zinc-300 mb-3 leading-relaxed">
+                  <p className="text-[#3D3D3A] dark:text-[#E1E1E0] mb-3 leading-relaxed">
                     <strong>Executive Summary:</strong> {analysisResult.summary}
                   </p>
                 )}
 
-                {/* Identified Gaps */}
                 {analysisResult.identifiedGaps && analysisResult.identifiedGaps.length > 0 && (
                   <div className="mb-3">
-                    <span className="font-semibold text-rose-300 block mb-1">
+                    <span className="font-semibold text-rose-600 dark:text-rose-400 block mb-1">
                       ⚠️ Missing Knowledge / Exam Traps You Skipped:
                     </span>
-                    <ul className="list-disc pl-4 space-y-1 text-zinc-300">
+                    <ul className="list-disc pl-4 space-y-1 text-[#3D3D3A] dark:text-[#B4B4B4]">
                       {analysisResult.identifiedGaps.map((gap: string, i: number) => (
                         <li key={i}>{gap}</li>
                       ))}
@@ -494,33 +486,33 @@ export const NotesView: React.FC = () => {
                   </div>
                 )}
 
-                {/* Quiz Questions */}
                 {analysisResult.quizQuestions && analysisResult.quizQuestions.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-zinc-800">
-                    <span className="font-semibold text-emerald-300 block mb-2">
+                  <div className="mt-3 pt-3 border-t border-[#E5E5E0] dark:border-[#30302E]">
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400 block mb-2">
                       🎯 Quick Drill Questions:
                     </span>
                     <div className="space-y-2">
                       {analysisResult.quizQuestions.map((q: any, i: number) => {
                         const isRevealed = revealedQuizIndex === i;
                         return (
-                          <div key={i} className="p-2.5 rounded-xl bg-zinc-950/70 border border-zinc-800">
-                            <p className="font-semibold text-zinc-200">
+                          <div key={i} className="p-3 rounded-xl bg-[#FFFFFF] dark:bg-[#262624] border border-[#DDDDDD] dark:border-[#30302E]">
+                            <p className="font-semibold text-[#1F1E1D] dark:text-[#ECECEC]">
                               {i + 1}. {q.question}
                             </p>
                             {isRevealed ? (
-                              <div className="mt-2 pt-2 border-t border-zinc-800 text-emerald-300">
+                              <div className="mt-2 pt-2 border-t border-[#F0EEE6] dark:border-[#30302E] text-emerald-700 dark:text-emerald-400">
                                 <strong>Answer:</strong> {q.answer}
                                 {q.explanation && (
-                                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                                  <p className="text-[11px] text-[#73726C] dark:text-[#B4B4B4] mt-0.5">
                                     {q.explanation}
                                   </p>
                                 )}
                               </div>
                             ) : (
                               <button
+                                type="button"
                                 onClick={() => setRevealedQuizIndex(i)}
-                                className="mt-1.5 text-[11px] text-indigo-400 hover:underline flex items-center gap-1"
+                                className="mt-1.5 text-[11px] text-[#D97757] hover:underline flex items-center gap-1 cursor-pointer font-medium"
                               >
                                 Reveal Answer
                               </button>
@@ -544,32 +536,32 @@ export const NotesView: React.FC = () => {
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     placeholder="Type markdown notes here..."
-                    className="flex-1 bg-zinc-950 text-zinc-100 font-mono text-xs p-4 rounded-2xl border border-zinc-800 focus:outline-none focus:border-indigo-500 leading-relaxed resize-none"
+                    className="flex-1 bg-[#FAF9F5] dark:bg-[#20201F] text-[#1F1E1D] dark:text-[#ECECEC] font-mono text-xs p-4 rounded-2xl border border-[#DDDDDD] dark:border-[#404040] focus:outline-hidden focus:border-[#D97757] leading-relaxed resize-none"
                   />
                   <div>
-                    <label className="text-xs text-zinc-400 block mb-1">Tags (comma-separated):</label>
+                    <label className="text-xs text-[#73726C] dark:text-[#B4B4B4] block mb-1">Tags (comma-separated):</label>
                     <input
                       type="text"
                       value={editTags}
                       onChange={(e) => setEditTags(e.target.value)}
                       placeholder="e.g. Python, Week 2, Midterm Prep"
-                      className="w-full bg-zinc-950 text-xs text-zinc-200 px-3 py-2 rounded-xl border border-zinc-800 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-[#FAF9F5] dark:bg-[#20201F] text-xs text-[#1F1E1D] dark:text-[#ECECEC] px-3 py-2 rounded-xl border border-[#DDDDDD] dark:border-[#404040] focus:outline-hidden focus:border-[#D97757]"
                     />
                   </div>
                 </div>
               ) : (
-                <div className="prose prose-invert prose-sm max-w-none prose-headings:font-bold prose-h1:text-xl prose-h2:text-base prose-h2:text-indigo-300 prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800 prose-blockquote:border-l-indigo-500 prose-blockquote:text-zinc-300 prose-strong:text-indigo-200">
+                <div className="prose prose-neutral dark:prose-invert prose-sm max-w-none prose-headings:font-serif prose-h1:text-xl prose-h2:text-base prose-h2:text-[#D97757] prose-pre:bg-[#FAF9F5] dark:prose-pre:bg-[#20201F] prose-pre:border prose-pre:border-[#E5E5E0] dark:prose-pre:border-[#30302E] prose-blockquote:border-l-[#D97757] prose-strong:text-[#D97757]">
                   <Markdown>{activeNote.content}</Markdown>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-zinc-500">
-            <BookOpen className="w-12 h-12 text-zinc-600 mb-3" />
-            <h3 className="text-sm font-semibold text-zinc-300">Select or Create a Note</h3>
-            <p className="text-xs text-zinc-500 mt-1 max-w-sm">
-              Keep organized notes by course and topic. You can write your own or have the AI TA generate master notes directly from syllabus topics.
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-[#888888]">
+            <BookOpen className="w-12 h-12 text-[#888888]/60 mb-3" />
+            <h3 className="text-base font-serif text-[#1F1E1D] dark:text-[#ECECEC]">Select or Create a Note</h3>
+            <p className="text-xs text-[#73726C] dark:text-[#B4B4B4] mt-1 max-w-sm">
+              Keep organized notes by course and topic. You can write your own or have the AI generate master notes directly from syllabus topics.
             </p>
           </div>
         )}
